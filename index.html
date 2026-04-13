@@ -134,10 +134,11 @@ let cachedState={};
 let activeListener=null;
 let customTasks={};
 let showAddForm=false;
+let initialized=false;
 
 db.ref("customTasks").on("value",(snap)=>{
 customTasks=snap.val()||{};
-renderUI();
+if(initialized) renderUI();
 });
 
 function dateKey(d){
@@ -162,6 +163,7 @@ if(activeListener) activeListener();
 const ref=db.ref("todos/"+dk);
 activeListener=ref.on("value",(snap)=>{
 cachedState=snap.val()||{};
+initialized=true;
 renderUI();
 showSync(true,"已同步");
 },(err)=>{
