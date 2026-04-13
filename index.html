@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>每日待办清单</title>
+<style>
+:root{
+--bg:#ffffff;--bg2:#f5f5f4;--bg3:#eeeeed;
+--text:#1a1a1a;--text2:#6b6b6b;--text3:#9a9a9a;
+--border:#e0e0de;--border2:#ccccc9;
+--green:#1D9E75;--green-bg:#E1F5EE;--green-t:#085041;
+--purple-bg:#EEEDFE;--purple-t:#3C3489;
+--blue-bg:#E6F1FB;--blue-t:#0C447C;
+--amber-bg:#FAEEDA;--amber-t:#633806;
+--radius:8px;
+}
+@media(prefers-color-scheme:dark){
+:root{
+--bg:#1a1a1a;--bg2:#2a2a2a;--bg3:#333;
+--text:#e8e8e8;--text2:#999;--text3:#666;
+--border:#3a3a3a;--border2:#555;
+--green:#0F6E56;--green-bg:#04342C;--green-t:#9FE1CB;
+--purple-bg:#26215C;--purple-t:#CECBF6;
+--blue-bg:#042C53;--blue-t:#B5D4F4;
+--amber-bg:#412402;--amber-t:#FAC775;
+}
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+background:var(--bg3);color:var(--text);
+display:flex;justify-content:center;padding:24px 16px;min-height:100vh;
+}
+.app{max-width:600px;width:100%;background:var(--bg);border-radius:12px;border:0.5px solid var(--border);padding:24px 28px;height:fit-content}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+.title{font-size:20px;font-weight:600;color:var(--text)}
+.date-nav{display:flex;align-items:center;gap:8px}
+.date-nav button{background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--radius);padding:5px 12px;font-size:14px;color:var(--text2);cursor:pointer;transition:background .15s}
+.date-nav button:hover{background:var(--bg2)}
+.date-label{font-size:15px;font-weight:500;color:var(--text);min-width:100px;text-align:center}
+.today-btn{font-size:12px;color:var(--green-t);background:var(--green-bg);border:none;border-radius:var(--radius);padding:3px 10px;cursor:pointer;font-weight:500}
+.today-btn:hover{opacity:.8}
+.progress-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.progress-text{font-size:13px;color:var(--text3)}
+.reset-btn{font-size:12px;color:var(--text3);background:none;border:none;cursor:pointer;text-decoration:underline}
+.reset-btn:hover{color:var(--text2)}
+.progress-bar{height:6px;background:var(--bg2);border-radius:3px;margin-bottom:22px;overflow:hidden}
+.progress-fill{height:100%;background:var(--green);border-radius:3px;transition:width .3s ease}
+.section{margin-bottom:18px}
+.section-header{font-size:13px;font-weight:500;color:var(--text2);margin-bottom:6px;padding-bottom:5px;border-bottom:0.5px solid var(--border)}
+.badge{font-size:11px;padding:2px 8px;border-radius:var(--radius);font-weight:500}
+.b-am{background:var(--purple-bg);color:var(--purple-t)}
+.b-pm{background:var(--blue-bg);color:var(--blue-t)}
+.b-week{background:var(--green-bg);color:var(--green-t)}
+.b-ddl{background:var(--amber-bg);color:var(--amber-t)}
+.item{display:flex;align-items:flex-start;gap:10px;padding:9px 10px;border-radius:var(--radius);cursor:pointer;transition:background .15s;user-select:none}
+.item:hover{background:var(--bg2)}
+.cb{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;transition:all .15s}
+.cb.checked{background:var(--green);border-color:var(--green)}
+.cb svg{display:none;width:12px;height:12px}
+.cb.checked svg{display:block}
+.item-text{font-size:14px;color:var(--text);line-height:1.5;transition:all .15s}
+.item.done .item-text{color:var(--text3);text-decoration:line-through}
+.sub{font-size:12px;color:var(--text3);margin-top:1px}
+.item.done .sub{text-decoration:line-through}
+.empty{font-size:13px;color:var(--text3);text-align:center;padding:20px 0}
+.footer{text-align:center;margin-top:12px;padding-top:12px;border-top:0.5px solid var(--border);font-size:11px;color:var(--text3)}
+.sync-status{font-size:11px;padding:2px 8px;border-radius:var(--radius);position:fixed;top:10px;right:10px;font-weight:500;transition:opacity .3s}
+.sync-ok{background:var(--green-bg);color:var(--green-t)}
+.sync-err{background:var(--amber-bg);color:var(--amber-t)}
+</style>
+</head>
+<body>
+<div class="sync-status" id="syncStatus"></div>
+<div class="app" id="app"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+// ========== Firebase 配置 ==========
+// 请替换为你自己的 Firebase 项目配置
+const firebaseConfig = {
+  apiKey: "AIzaSyBoudCl2nppeXP3nk6S-wG_ZO3omrchk3U",
+  authDomain: "wangmiao-todo.firebaseapp.com",
+  databaseURL: "https://wangmiao-todo-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "wangmiao-todo",
+  storageBucket: "wangmiao-todo.firebasestorage.app",
+  messagingSenderId: "30777632077",
+  appId: "1:30777632077:web:dffb0c9933e012f69e4304"
+};
+// ====================================
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const DAILY=[
+{id:"kpi",text:"6组KPI表格检查 + 数据填写",group:"am"},
+{id:"board",text:"看板检查",group:"am"},
+{id:"feedback",text:"监管反馈汇总检查",group:"am"},
+{id:"spot",text:"抽查：新媒体表 / 外链表 / 17吃瓜发布表",group:"pm"},
+{id:"ai_daily",text:"查收AI数据分析报告",sub:"自动跑，检查异常",group:"pm"},
+{id:"daily_report",text:"写日报",sub:"发UK工作群 + 一部汇报群",group:"pm"}
+];
+
+const WEEKLY={
+1:[{id:"w_summary",text:"周报表汇总",sub:"发【运营管理】群"},{id:"w_ai",text:"查收本周数据分析报告",sub:"AI自动跑"}],
+3:[{id:"w_rank1",text:"17吃瓜 每周榜单1"}],
+5:[{id:"w_fri_report",text:"早上发自动化周报"}],
+6:[{id:"w_rank2",text:"17吃瓜 每周榜单2"},{id:"w_announce",text:"17吃瓜 官方公告",sub:"检查更新"}],
+0:[{id:"w_weekly",text:"完成周报",sub:"最迟今晚发",ddl:true},{id:"w_thoughts",text:"心得总结发频道",ddl:true}]
+};
+
+const DAYNAMES=["周日","周一","周二","周三","周四","周五","周六"];
+
+let currentDate=new Date();
+let cachedState={};
+let activeListener=null;
+
+function dateKey(d){
+return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function isToday(d){
+const t=new Date();
+return d.getFullYear()===t.getFullYear()&&d.getMonth()===t.getMonth()&&d.getDate()===t.getDate();
+}
+
+function showSync(ok, msg){
+const el=document.getElementById("syncStatus");
+el.textContent=msg;
+el.className="sync-status "+(ok?"sync-ok":"sync-err");
+el.style.opacity="1";
+setTimeout(()=>{el.style.opacity="0"},2000);
+}
+
+function listenToDate(dk){
+if(activeListener) activeListener();
+const ref=db.ref("todos/"+dk);
+activeListener=ref.on("value",(snap)=>{
+cachedState=snap.val()||{};
+renderUI();
+showSync(true,"已同步");
+},(err)=>{
+console.error("Firebase read error:",err);
+showSync(false,"同步失败");
+});
+// Store ref for cleanup
+activeListener=()=>ref.off("value");
+}
+
+function toggleTask(dk, id){
+const newVal=!cachedState[id];
+if(newVal){
+db.ref("todos/"+dk+"/"+id).set(true);
+}else{
+db.ref("todos/"+dk+"/"+id).remove();
+}
+}
+
+function resetDay(dk){
+if(confirm("确认重置当天的勾选？")){
+db.ref("todos/"+dk).remove();
+}
+}
+
+function switchDate(){
+const dk=dateKey(currentDate);
+listenToDate(dk);
+}
+
+function render(){
+switchDate();
+}
+
+function renderUI(){
+const dk=dateKey(currentDate);
+const state=cachedState;
+const dow=currentDate.getDay();
+const weekly=WEEKLY[dow]||[];
+const allTasks=[...DAILY,...weekly];
+const total=allTasks.length;
+const done=allTasks.filter(t=>state[t.id]).length;
+const pct=total?Math.round(done/total*100):0;
+const dateStr=(currentDate.getMonth()+1)+"/"+currentDate.getDate()+" "+DAYNAMES[dow];
+const todayFlag=isToday(currentDate);
+
+const am=DAILY.filter(t=>t.group==="am");
+const pm=DAILY.filter(t=>t.group==="pm");
+
+let h=`
+<div class="header">
+<span class="title">每日待办清单</span>
+<div class="date-nav">
+<button id="prev">&larr;</button>
+<span class="date-label">${dateStr}${todayFlag?" ·今天":""}</span>
+<button id="next">&rarr;</button>
+${!todayFlag?'<button class="today-btn" id="goToday">回今天</button>':""}
+</div>
+</div>
+<div class="progress-row">
+<span class="progress-text">${done} / ${total} 已完成 (${pct}%)</span>
+<button class="reset-btn" id="resetBtn">重置当天</button>
+</div>
+<div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+`;
+
+h+=buildSection("上午优先","b-am",am,state);
+h+=buildSection("下午检查 & 输出","b-pm",pm,state);
+
+if(weekly.length){
+const hasDdl=weekly.some(t=>t.ddl);
+h+=buildSection(hasDdl?"本日deadline":"本日周任务",hasDdl?"b-ddl":"b-week",weekly,state);
+}
+
+if(pct===100){
+h+='<div class="empty">今日任务全部完成！</div>';
+}
+
+h+='<div class="footer">数据通过云端同步，所有设备实时共享</div>';
+
+document.getElementById("app").innerHTML=h;
+
+document.getElementById("prev").onclick=()=>{currentDate.setDate(currentDate.getDate()-1);render()};
+document.getElementById("next").onclick=()=>{currentDate.setDate(currentDate.getDate()+1);render()};
+const todayBtn=document.getElementById("goToday");
+if(todayBtn) todayBtn.onclick=()=>{currentDate=new Date();render()};
+document.getElementById("resetBtn").onclick=()=>resetDay(dk);
+
+document.querySelectorAll(".item[data-id]").forEach(el=>{
+el.onclick=()=>{
+const id=el.getAttribute("data-id");
+toggleTask(dk,id);
+};
+});
+}
+
+function buildSection(label,badgeCls,tasks,state){
+let h=`<div class="section"><div class="section-header"><span class="badge ${badgeCls}">${label}</span></div>`;
+tasks.forEach(t=>{
+const checked=!!state[t.id];
+h+=`<div class="item${checked?" done":""}" data-id="${t.id}">
+<div class="cb${checked?" checked":""}"><svg viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+<div><div class="item-text">${t.text}</div>${t.sub?`<div class="sub">${t.sub}</div>`:""}</div>
+</div>`;
+});
+h+="</div>";
+return h;
+}
+
+render();
+</script>
+</body>
+</html>
