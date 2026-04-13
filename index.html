@@ -111,12 +111,12 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 const DAILY=[
-{id:"kpi",text:"6组KPI表格检查 + 数据填写",group:"am"},
+{id:"kpi",text:"6组KPI表格检查 + 每日数据填写",group:"am"},
 {id:"board",text:"看板检查",group:"am"},
 {id:"feedback",text:"监管反馈汇总检查",group:"am"},
 {id:"spot",text:"抽查：新媒体表 / 外链表 / 17吃瓜发布表",group:"pm"},
-{id:"ai_daily",text:"查收AI数据分析报告",sub:"自动跑，检查异常",group:"pm"},
-{id:"daily_report",text:"写日报",sub:"发UK工作群 + 一部汇报群",group:"pm"}
+{id:"ai_daily",text:"昨天数据分析总结报告",sub:"AI自动跑",group:"pm"},
+{id:"daily_report",text:"写日报",sub:"发UK工作群 + 一部工作汇报群",group:"pm"}
 ];
 
 const WEEKLY={
@@ -203,15 +203,17 @@ const dk=dateKey(currentDate);
 const state=cachedState;
 const dow=currentDate.getDay();
 const weekly=WEEKLY[dow]||[];
-const allTasks=[...DAILY,...weekly];
+const isWeekend=(dow===0||dow===6);
+const dailyTasks=isWeekend?[]:DAILY;
+const allTasks=[...dailyTasks,...weekly];
 const total=allTasks.length;
 const done=allTasks.filter(t=>state[t.id]).length;
 const pct=total?Math.round(done/total*100):0;
 const dateStr=(currentDate.getMonth()+1)+"/"+currentDate.getDate()+" "+DAYNAMES[dow];
 const todayFlag=isToday(currentDate);
 
-const am=DAILY.filter(t=>t.group==="am");
-const pm=DAILY.filter(t=>t.group==="pm");
+const am=isWeekend?[]:DAILY.filter(t=>t.group==="am");
+const pm=isWeekend?[]:DAILY.filter(t=>t.group==="pm");
 
 let h=`
 <div class="header">
