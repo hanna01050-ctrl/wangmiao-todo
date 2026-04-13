@@ -69,6 +69,22 @@ display:flex;justify-content:center;padding:24px 16px;min-height:100vh;
 .sync-status{font-size:11px;padding:2px 8px;border-radius:var(--radius);position:fixed;top:10px;right:10px;font-weight:500;transition:opacity .3s}
 .sync-ok{background:var(--green-bg);color:var(--green-t)}
 .sync-err{background:var(--amber-bg);color:var(--amber-t)}
+.add-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:10px;margin-top:10px;border:1.5px dashed var(--border2);border-radius:var(--radius);background:none;color:var(--text3);font-size:13px;cursor:pointer;transition:all .15s}
+.add-btn:hover{background:var(--bg2);color:var(--text2);border-color:var(--text3)}
+.add-form{background:var(--bg2);border-radius:var(--radius);padding:14px;margin-top:10px;border:0.5px solid var(--border)}
+.add-form input,.add-form select{width:100%;padding:8px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;margin-bottom:8px;font-family:inherit}
+.add-form select{appearance:auto}
+.add-form-row{display:flex;gap:8px}
+.add-form-row>*{flex:1}
+.add-form-actions{display:flex;gap:8px;margin-top:4px}
+.btn-confirm{flex:1;padding:7px;border:none;border-radius:var(--radius);background:var(--green);color:white;font-size:13px;cursor:pointer;font-weight:500}
+.btn-confirm:hover{opacity:.9}
+.btn-cancel{flex:1;padding:7px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text2);font-size:13px;cursor:pointer}
+.btn-cancel:hover{background:var(--bg2)}
+.del-btn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:0 4px;opacity:0;transition:opacity .15s;flex-shrink:0;margin-left:auto}
+.item:hover .del-btn{opacity:1}
+.b-custom{background:var(--green-bg);color:var(--green-t)}
+.b-ddl-custom{background:var(--amber-bg);color:var(--amber-t)}
 </style>
 </head>
 <body>
@@ -116,6 +132,13 @@ const DAYNAMES=["周日","周一","周二","周三","周四","周五","周六"];
 let currentDate=new Date();
 let cachedState={};
 let activeListener=null;
+let customTasks={};
+let showAddForm=false;
+
+db.ref("customTasks").on("value",(snap)=>{
+customTasks=snap.val()||{};
+renderUI();
+});
 
 function dateKey(d){
 return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -199,10 +222,10 @@ ${!todayFlag?'<button class="today-btn" id="goToday">回今天</button>':""}
 </div>
 </div>
 <div class="progress-row">
-<span class="progress-text">${done} / ${total} 已完成 (${pct}%)</span>
+<span class="progress-text" id="progressText">${done} / ${total} 已完成 (${pct}%)</span>
 <button class="reset-btn" id="resetBtn">重置当天</button>
 </div>
-<div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+<div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:${pct}%"></div></div>
 `;
 
 h+=buildSection("上午优先","b-am",am,state);
@@ -213,39 +236,147 @@ const hasDdl=weekly.some(t=>t.ddl);
 h+=buildSection(hasDdl?"本日deadline":"本日周任务",hasDdl?"b-ddl":"b-week",weekly,state);
 }
 
-if(pct===100){
+const customWeekly=[];
+const customDeadline=[];
+Object.entries(customTasks).forEach(([fid,t])=>{
+if(t.type==="weekly"&&t.day===dow){
+customWeekly.push({...t,id:"c_"+fid,firebaseId:fid});
+}else if(t.type==="deadline"){
+if(dk<=t.deadline){
+customDeadline.push({...t,id:"c_"+fid,firebaseId:fid,ddl:true});
+}
+}
+});
+if(customWeekly.length) h+=buildSection("自定义周任务","b-custom",customWeekly,state,true);
+if(customDeadline.length) h+=buildSection("截止任务","b-ddl-custom",customDeadline,state,true);
+
+const allCustom=[...customWeekly,...customDeadline];
+const totalAll=total+allCustom.length;
+const doneAll=done+allCustom.filter(t=>state[t.id]).length;
+const pctAll=totalAll?Math.round(doneAll/totalAll*100):0;
+
+if(totalAll>0&&totalAll===doneAll){
 h+='<div class="empty">今日任务全部完成！</div>';
+}
+
+if(showAddForm){
+h+=buildAddForm();
+}else{
+h+='<button class="add-btn" id="addTaskBtn">+ 添加自定义任务</button>';
 }
 
 h+='<div class="footer">数据通过云端同步，所有设备实时共享</div>';
 
 document.getElementById("app").innerHTML=h;
 
-document.getElementById("prev").onclick=()=>{currentDate.setDate(currentDate.getDate()-1);render()};
-document.getElementById("next").onclick=()=>{currentDate.setDate(currentDate.getDate()+1);render()};
+document.getElementById("progressText").textContent=`${doneAll} / ${totalAll} 已完成 (${pctAll}%)`;
+document.getElementById("progressFill").style.width=pctAll+"%";
+
+document.getElementById("prev").onclick=()=>{currentDate.setDate(currentDate.getDate()-1);showAddForm=false;render()};
+document.getElementById("next").onclick=()=>{currentDate.setDate(currentDate.getDate()+1);showAddForm=false;render()};
 const todayBtn=document.getElementById("goToday");
-if(todayBtn) todayBtn.onclick=()=>{currentDate=new Date();render()};
+if(todayBtn) todayBtn.onclick=()=>{currentDate=new Date();showAddForm=false;render()};
 document.getElementById("resetBtn").onclick=()=>resetDay(dk);
 
+const addBtn=document.getElementById("addTaskBtn");
+if(addBtn) addBtn.onclick=()=>{showAddForm=true;renderUI()};
+
+const cancelBtn=document.getElementById("cancelAdd");
+if(cancelBtn) cancelBtn.onclick=()=>{showAddForm=false;renderUI()};
+
+const confirmBtn=document.getElementById("confirmAdd");
+if(confirmBtn) confirmBtn.onclick=()=>saveCustomTask();
+
+const typeSelect=document.getElementById("taskType");
+if(typeSelect) typeSelect.onchange=()=>{
+document.getElementById("dayRow").style.display=typeSelect.value==="weekly"?"block":"none";
+document.getElementById("deadlineRow").style.display=typeSelect.value==="deadline"?"block":"none";
+};
+
 document.querySelectorAll(".item[data-id]").forEach(el=>{
-el.onclick=()=>{
+el.onclick=(e)=>{
+if(e.target.closest(".del-btn")) return;
 const id=el.getAttribute("data-id");
 toggleTask(dk,id);
 };
 });
+
+document.querySelectorAll(".del-btn[data-fid]").forEach(el=>{
+el.onclick=(e)=>{
+e.stopPropagation();
+const fid=el.getAttribute("data-fid");
+if(confirm("确认删除这个自定义任务？")) deleteCustomTask(fid);
+};
+});
 }
 
-function buildSection(label,badgeCls,tasks,state){
+function buildSection(label,badgeCls,tasks,state,isCustom){
 let h=`<div class="section"><div class="section-header"><span class="badge ${badgeCls}">${label}</span></div>`;
 tasks.forEach(t=>{
 const checked=!!state[t.id];
+const delBtn=isCustom?`<button class="del-btn" data-fid="${t.firebaseId}">&times;</button>`:"";
 h+=`<div class="item${checked?" done":""}" data-id="${t.id}">
 <div class="cb${checked?" checked":""}"><svg viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-<div><div class="item-text">${t.text}</div>${t.sub?`<div class="sub">${t.sub}</div>`:""}</div>
+<div style="flex:1"><div class="item-text">${t.text}</div>${t.sub?`<div class="sub">${t.sub}${t.deadline?" · 截止 "+t.deadline:""}</div>`:t.deadline?`<div class="sub">截止 ${t.deadline}</div>`:""}</div>
+${delBtn}
 </div>`;
 });
 h+="</div>";
 return h;
+}
+
+function buildAddForm(){
+const today=dateKey(new Date());
+return `<div class="add-form">
+<input id="taskText" placeholder="任务名称" autofocus>
+<input id="taskSub" placeholder="备注（可选）">
+<div class="add-form-row">
+<select id="taskType">
+<option value="weekly">每周固定</option>
+<option value="deadline">截止日期</option>
+</select>
+</div>
+<div id="dayRow">
+<select id="taskDay">
+<option value="1">周一</option>
+<option value="2">周二</option>
+<option value="3">周三</option>
+<option value="4">周四</option>
+<option value="5">周五</option>
+<option value="6">周六</option>
+<option value="0">周日</option>
+</select>
+</div>
+<div id="deadlineRow" style="display:none">
+<input id="taskDeadline" type="date" min="${today}">
+</div>
+<div class="add-form-actions">
+<button class="btn-confirm" id="confirmAdd">添加</button>
+<button class="btn-cancel" id="cancelAdd">取消</button>
+</div>
+</div>`;
+}
+
+function saveCustomTask(){
+const text=document.getElementById("taskText").value.trim();
+if(!text) return;
+const sub=document.getElementById("taskSub").value.trim();
+const type=document.getElementById("taskType").value;
+const task={text,type};
+if(sub) task.sub=sub;
+if(type==="weekly"){
+task.day=parseInt(document.getElementById("taskDay").value);
+}else{
+const dl=document.getElementById("taskDeadline").value;
+if(!dl){alert("请选择截止日期");return}
+task.deadline=dl;
+}
+db.ref("customTasks").push(task);
+showAddForm=false;
+}
+
+function deleteCustomTask(fid){
+db.ref("customTasks/"+fid).remove();
 }
 
 render();
